@@ -321,6 +321,56 @@ class Model:
         self.log("Cannot cancel orders for {}/{}.".format(asset1 , asset2 , str(e)))
         return
 
+    # Advanced: Calculate optimal position size based on opportunity
+    def calculate_optimal_position_size(self, exchange, profit_pct, eth_price_usd):
+        """Dynamic position sizing based on opportunity size"""
+        if not settings.ENABLE_DYNAMIC_POSITION_SIZING:
+            return settings.MAX_POSITION_SIZE
+        
+        balance_eth = self.get_balance(exchange, 'ETH')
+        if balance_eth == 0:
+            return 0
+        
+        # Scale position size based on profit percentage
+        # Higher profit = larger position (up to max)
+        base_size = settings.MAX_POSITION_SIZE
+        if profit_pct > 1.0:  # Very profitable opportunity
+            scale_factor = min(1.0, profit_pct / 2.0)  # Scale up to 2x for 2%+ profit
+            optimal_size = base_size * (1 + scale_factor * 0.5)  # Up to 1.5x base
+            return min(optimal_size, 0.8)  # Cap at 80% for safety
+        elif profit_pct > 0.5:  # Good opportunity
+            return base_size
+        else:  # Smaller opportunity
+            return base_size * 0.7  # Use smaller position
+        
+    # Advanced: Optimize for slippage using order book depth
+    def estimate_slippage(self, exchange, asset1, asset2, amount):
+        """Estimate slippage based on order book depth"""
+        if not settings.ENABLE_SLIPPAGE_OPTIMIZATION:
+            return 0
+        
+        try:
+            order_book = self.get_order_book(exchange, asset1, asset2, mode="asks")
+            if not order_book:
+                return 0.001  # Default 0.1% slippage
+            
+            total_volume = 0
+            weighted_price = 0
+            for price, volume in order_book[:10]:  # Check top 10 levels
+                total_volume += volume
+                weighted_price += price * volume
+                if total_volume >= amount:
+                    break
+            
+            if total_volume > 0:
+                avg_price = weighted_price / total_volume
+                best_price = order_book[0][0] if order_book else avg_price
+                slippage = abs(avg_price - best_price) / best_price
+                return slippage
+            return 0.001
+        except:
+            return 0.001
+    
     # Estimate the profit for forward arbitrage on given asset (improved with maker fees).
     def estimate_arbitrage_forward(self , exchange , asset):
         try:
@@ -328,24 +378,58 @@ class Model:
             alt_btc = self.get_sell_limit_price(exchange , asset , 'BTC')
 
             if not alt_btc or not alt_eth:
-                self.log("Less than 3 orders for, skipping.".format(asset , str(exchange)))
-                return -100
+                if settings.AGGRESSIVE_MODE:
+                    # In aggressive mode, try with market prices as fallback
+                    alt_eth = self.get_price(exchange, asset, 'ETH', mode='ask')
+                    alt_btc = self.get_price(exchange, asset, 'BTC', mode='bid')
+                    if not alt_btc or not alt_eth:
+                        return -100
+                else:
+                    self.log("Less than {} orders for {}, skipping.".format(settings.MIN_ORDERBOOK_DEPTH, asset))
+                    return -100
 
             # Use maker fees for limit orders (better profitability)
-            step_1 = (1 / alt_eth) * self.maker_fee
-            step_2 = (step_1 * alt_btc) * self.maker_fee
-            step_3 = (step_2 / self.get_price(exchange , 'ETH' , 'BTC' , mode='ask')) * self.maker_fee
+            # Optimize fee if BNB is available (potential 25% discount)
+            maker_fee_optimized = self.maker_fee
+            try:
+                bnb_balance = self.get_balance(exchange, 'BNB')
+                if bnb_balance > 0.1:  # Has BNB for fee payment
+                    maker_fee_optimized = 0.99975  # 0.025% fee with BNB discount
+            except:
+                pass
+            
+            step_1 = (1 / alt_eth) * maker_fee_optimized
+            step_2 = (step_1 * alt_btc) * maker_fee_optimized
+            eth_btc_price = self.get_price(exchange , 'ETH' , 'BTC' , mode='ask')
+            step_3 = (step_2 / eth_btc_price) * maker_fee_optimized
 
             profit_pct = (step_3 - 1) * 100
             
-            # Calculate estimated profit in USD
+            # Calculate estimated profit in USD with dynamic position sizing
             eth_price_usd = self.get_price(exchange, 'ETH', 'USDT', mode='average')
             if eth_price_usd:
                 balance_eth = self.get_balance(exchange, 'ETH')
-                position_size = min(balance_eth * settings.MAX_POSITION_SIZE, balance_eth)
-                profit_usd = (profit_pct / 100) * position_size * eth_price_usd
+                if balance_eth == 0:
+                    return -100
+                
+                # Use dynamic position sizing
+                position_size_pct = self.calculate_optimal_position_size(exchange, profit_pct, eth_price_usd)
+                position_size = balance_eth * position_size_pct
+                
+                # Account for slippage
+                slippage_penalty = 0
+                if settings.ENABLE_SLIPPAGE_OPTIMIZATION:
+                    slippage_penalty = self.estimate_slippage(exchange, asset, 'ETH', position_size)
+                    slippage_penalty += self.estimate_slippage(exchange, asset, 'BTC', position_size * alt_btc)
+                
+                profit_usd = (profit_pct / 100 - slippage_penalty) * position_size * eth_price_usd
+                
                 if profit_usd < settings.MIN_PROFIT_USD:
                     return -100  # Not profitable enough
+                
+                # In aggressive mode, accept slightly lower profits
+                if settings.AGGRESSIVE_MODE and profit_usd >= settings.MIN_PROFIT_USD * 0.8:
+                    return profit_pct
             
             return profit_pct
         except ZeroDivisionError:
@@ -361,24 +445,58 @@ class Model:
             alt_eth = self.get_sell_limit_price(exchange , asset , 'ETH')
 
             if not alt_btc or not alt_eth:
-                self.log("Less than 3 orders for {} on {}, skipping.".format(asset , str(exchange)))
-                return -100
+                if settings.AGGRESSIVE_MODE:
+                    # In aggressive mode, try with market prices as fallback
+                    alt_btc = self.get_price(exchange, asset, 'BTC', mode='ask')
+                    alt_eth = self.get_price(exchange, asset, 'ETH', mode='bid')
+                    if not alt_btc or not alt_eth:
+                        return -100
+                else:
+                    self.log("Less than {} orders for {} on {}, skipping.".format(settings.MIN_ORDERBOOK_DEPTH, asset, str(exchange)))
+                    return -100
 
             # Use maker fees for limit orders (better profitability)
-            step_1 = (self.get_price(exchange , 'ETH' , 'BTC' , mode='bid')) * self.maker_fee
-            step_2 = (step_1 / alt_btc) * self.maker_fee
-            step_3 = (step_2 * alt_eth) * self.maker_fee
+            # Optimize fee if BNB is available (potential 25% discount)
+            maker_fee_optimized = self.maker_fee
+            try:
+                bnb_balance = self.get_balance(exchange, 'BNB')
+                if bnb_balance > 0.1:  # Has BNB for fee payment
+                    maker_fee_optimized = 0.99975  # 0.025% fee with BNB discount
+            except:
+                pass
+            
+            eth_btc_price = self.get_price(exchange , 'ETH' , 'BTC' , mode='bid')
+            step_1 = eth_btc_price * maker_fee_optimized
+            step_2 = (step_1 / alt_btc) * maker_fee_optimized
+            step_3 = (step_2 * alt_eth) * maker_fee_optimized
 
             profit_pct = (step_3 - 1) * 100
             
-            # Calculate estimated profit in USD
+            # Calculate estimated profit in USD with dynamic position sizing
             eth_price_usd = self.get_price(exchange, 'ETH', 'USDT', mode='average')
             if eth_price_usd:
                 balance_eth = self.get_balance(exchange, 'ETH')
-                position_size = min(balance_eth * settings.MAX_POSITION_SIZE, balance_eth)
-                profit_usd = (profit_pct / 100) * position_size * eth_price_usd
+                if balance_eth == 0:
+                    return -100
+                
+                # Use dynamic position sizing
+                position_size_pct = self.calculate_optimal_position_size(exchange, profit_pct, eth_price_usd)
+                position_size = balance_eth * position_size_pct
+                
+                # Account for slippage
+                slippage_penalty = 0
+                if settings.ENABLE_SLIPPAGE_OPTIMIZATION:
+                    slippage_penalty = self.estimate_slippage(exchange, 'ETH', 'BTC', position_size)
+                    slippage_penalty += self.estimate_slippage(exchange, asset, 'BTC', position_size * eth_btc_price / alt_btc)
+                
+                profit_usd = (profit_pct / 100 - slippage_penalty) * position_size * eth_price_usd
+                
                 if profit_usd < settings.MIN_PROFIT_USD:
                     return -100  # Not profitable enough
+                
+                # In aggressive mode, accept slightly lower profits
+                if settings.AGGRESSIVE_MODE and profit_usd >= settings.MIN_PROFIT_USD * 0.8:
+                    return profit_pct
             
             return profit_pct
         except ZeroDivisionError:
@@ -391,8 +509,13 @@ class Model:
     def run_arbitrage_forward(self , exchange , asset):
         self.log("Arbitrage on {}: ETH -> {} -> BTC -> ETH".format(exchange , asset))
         balance_before = self.get_balance(exchange , "ETH")
-        # Use position sizing for risk management
-        position_size = min(settings.MAX_POSITION_SIZE, 1.0)
+        
+        # Calculate optimal position size based on opportunity
+        profit_estimate = self.estimate_arbitrage_forward(exchange, asset)
+        eth_price_usd = self.get_price(exchange, 'ETH', 'USDT', mode='average') or 2000
+        position_size_pct = self.calculate_optimal_position_size(exchange, profit_estimate, eth_price_usd)
+        position_size = min(position_size_pct, 1.0)
+        
         result1 = self.best_buy(exchange , asset , 'ETH' , position_size)
 
         if not result1:
@@ -415,8 +538,13 @@ class Model:
     def run_arbitrage_backward(self , exchange , asset):
         self.log("Arbitrage on {}: ETH -> BTC -> {} -> ETH".format(exchange , asset))
         balance_before = self.get_balance(exchange , "ETH")
-        # Use position sizing for risk management
-        position_size = min(settings.MAX_POSITION_SIZE, 1.0)
+        
+        # Calculate optimal position size based on opportunity
+        profit_estimate = self.estimate_arbitrage_backward(exchange, asset)
+        eth_price_usd = self.get_price(exchange, 'ETH', 'USDT', mode='average') or 2000
+        position_size_pct = self.calculate_optimal_position_size(exchange, profit_estimate, eth_price_usd)
+        position_size = min(position_size_pct, 1.0)
+        
         self.sell(exchange , "ETH" , "BTC" , position_size)
         result1 = self.best_buy(exchange , asset , 'BTC' , position_size)
 
