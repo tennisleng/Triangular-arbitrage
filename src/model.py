@@ -5,12 +5,26 @@ from data import secrets , settings
 import time
 import ccxt
 
+# Import Telegram notifier if available
+try:
+    from src.telegram_notifier import TelegramNotifier
+    telegram_available = True
+except:
+    telegram_available = False
+
 
 class Model:
 
     # Exchange
     binance = None
-    fee = 0.999
+    fee = 0.999  # Taker fee (0.1%)
+    maker_fee = 0.9995  # Maker fee (0.05% with potential BNB discount)
+    
+    # Profit tracking
+    total_profit_eth = 0.0
+    total_profit_usd = 0.0
+    trades_executed = 0
+    successful_trades = 0
 
     # Cache
     cache_prices = []
@@ -23,10 +37,24 @@ class Model:
 
     # Init binance, create connections with secrets file.
     def __init__(self):
+        # Check subscription/license
+        try:
+            from src.subscription import SubscriptionManager
+            self.subscription = SubscriptionManager()
+            self.subscription.check_premium_features()
+        except:
+            self.subscription = None
+        
         self.binance = ccxt.binance({
             'apiKey': secrets.BINANCE_KEY , 'secret': secrets.BINANCE_SECRET , 'timeout': 30000 ,
             'enableRateLimit': True
         })
+        self.load_profit_tracking()
+        # Initialize Telegram notifier
+        if telegram_available:
+            self.telegram = TelegramNotifier()
+        else:
+            self.telegram = None
 
     # Create a buy order. 'amount' or 'amount_percentage' should be specified.
     def buy(self , exchange , asset1 , asset2 , amount_percentage=None , amount=None , limit=None , timeout=None):
@@ -293,7 +321,7 @@ class Model:
         self.log("Cannot cancel orders for {}/{}.".format(asset1 , asset2 , str(e)))
         return
 
-    # Estimate the profit for forward arbitrage on given asset.
+    # Estimate the profit for forward arbitrage on given asset (improved with maker fees).
     def estimate_arbitrage_forward(self , exchange , asset):
         try:
             alt_eth = self.get_buy_limit_price(exchange , asset , 'ETH')
@@ -303,15 +331,30 @@ class Model:
                 self.log("Less than 3 orders for, skipping.".format(asset , str(exchange)))
                 return -100
 
-            step_1 = (1 / alt_eth) * self.fee
-            step_2 = (step_1 * alt_btc) * self.fee
-            step_3 = (step_2 / self.get_price(exchange , 'ETH' , 'BTC' , mode='ask')) * self.fee
+            # Use maker fees for limit orders (better profitability)
+            step_1 = (1 / alt_eth) * self.maker_fee
+            step_2 = (step_1 * alt_btc) * self.maker_fee
+            step_3 = (step_2 / self.get_price(exchange , 'ETH' , 'BTC' , mode='ask')) * self.maker_fee
 
-            return (step_3 - 1) * 100
+            profit_pct = (step_3 - 1) * 100
+            
+            # Calculate estimated profit in USD
+            eth_price_usd = self.get_price(exchange, 'ETH', 'USDT', mode='average')
+            if eth_price_usd:
+                balance_eth = self.get_balance(exchange, 'ETH')
+                position_size = min(balance_eth * settings.MAX_POSITION_SIZE, balance_eth)
+                profit_usd = (profit_pct / 100) * position_size * eth_price_usd
+                if profit_usd < settings.MIN_PROFIT_USD:
+                    return -100  # Not profitable enough
+            
+            return profit_pct
         except ZeroDivisionError:
             return -1
+        except Exception as e:
+            self.log("Error estimating forward arbitrage: {}".format(str(e)))
+            return -1
 
-    # Estimate the profit for backward arbitrage on given asset.
+    # Estimate the profit for backward arbitrage on given asset (improved with maker fees).
     def estimate_arbitrage_backward(self , exchange , asset):
         try:
             alt_btc = self.get_buy_limit_price(exchange , asset , 'BTC')
@@ -321,25 +364,42 @@ class Model:
                 self.log("Less than 3 orders for {} on {}, skipping.".format(asset , str(exchange)))
                 return -100
 
-            step_1 = (self.get_price(exchange , 'ETH' , 'BTC' , mode='bid')) * self.fee
-            step_2 = (step_1 / alt_btc) * self.fee
-            step_3 = (step_2 * alt_eth) * self.fee
+            # Use maker fees for limit orders (better profitability)
+            step_1 = (self.get_price(exchange , 'ETH' , 'BTC' , mode='bid')) * self.maker_fee
+            step_2 = (step_1 / alt_btc) * self.maker_fee
+            step_3 = (step_2 * alt_eth) * self.maker_fee
 
-            return (step_3 - 1) * 100
+            profit_pct = (step_3 - 1) * 100
+            
+            # Calculate estimated profit in USD
+            eth_price_usd = self.get_price(exchange, 'ETH', 'USDT', mode='average')
+            if eth_price_usd:
+                balance_eth = self.get_balance(exchange, 'ETH')
+                position_size = min(balance_eth * settings.MAX_POSITION_SIZE, balance_eth)
+                profit_usd = (profit_pct / 100) * position_size * eth_price_usd
+                if profit_usd < settings.MIN_PROFIT_USD:
+                    return -100  # Not profitable enough
+            
+            return profit_pct
         except ZeroDivisionError:
+            return -1
+        except Exception as e:
+            self.log("Error estimating backward arbitrage: {}".format(str(e)))
             return -1
 
     # Executes forward arbitrage on given asset: ETH -> ALT -> BTC -> ETH.
     def run_arbitrage_forward(self , exchange , asset):
         self.log("Arbitrage on {}: ETH -> {} -> BTC -> ETH".format(exchange , asset))
         balance_before = self.get_balance(exchange , "ETH")
-        result1 = self.best_buy(exchange , asset , 'ETH' , 1)
+        # Use position sizing for risk management
+        position_size = min(settings.MAX_POSITION_SIZE, 1.0)
+        result1 = self.best_buy(exchange , asset , 'ETH' , position_size)
 
         if not result1:
             self.log("Failed to convert {} to ETH, canceling arbitrage.".format(asset))
             return
 
-        result2 = self.best_sell(exchange , asset , 'BTC' , 1)
+        result2 = self.best_sell(exchange , asset , 'BTC' , position_size)
 
         if not result2:
             self.log(
@@ -355,8 +415,10 @@ class Model:
     def run_arbitrage_backward(self , exchange , asset):
         self.log("Arbitrage on {}: ETH -> BTC -> {} -> ETH".format(exchange , asset))
         balance_before = self.get_balance(exchange , "ETH")
-        self.sell(exchange , "ETH" , "BTC" , 1)
-        result1 = self.best_buy(exchange , asset , 'BTC' , 1)
+        # Use position sizing for risk management
+        position_size = min(settings.MAX_POSITION_SIZE, 1.0)
+        self.sell(exchange , "ETH" , "BTC" , position_size)
+        result1 = self.best_buy(exchange , asset , 'BTC' , position_size)
 
         if not result1:
             self.log("Failed to convert BTC to {}, canceling arbitrage. Will convert BTC to ETH.".format(asset))
@@ -364,7 +426,7 @@ class Model:
             self.summarize_arbitrage(exchange , balance_before , asset)
             return
 
-        result2 = self.best_sell(exchange , asset , 'ETH' , 1)
+        result2 = self.best_sell(exchange , asset , 'ETH' , position_size)
 
         if not result2:
             self.log(
@@ -376,12 +438,12 @@ class Model:
 
         self.summarize_arbitrage(exchange , balance_before , asset)
 
-    # self.Logs given string.
+    # Logs given string.
     @staticmethod
     def log(text):
         formatted_text = "[{}] {}".format(datetime.now().strftime("%d/%m/%Y %H:%M:%S") , text)
 
-        with open('self.logs.txt' , 'a+') as file:
+        with open('logs.txt' , 'a+') as file:
             file.write(formatted_text)
             file.write("\n")
 
@@ -429,5 +491,70 @@ class Model:
     def summarize_arbitrage(self , exchange , balance_before , asset):
         balance_after = self.get_balance(exchange , "ETH")
         diff = balance_after - balance_before
-        diff_eur = diff * self.get_price(exchange , 'ETH' , 'EUR')
-        self.log("Arbitrage {:5} on binance, diff: {:8.6f}ETH ({:.2f} EUR).".format(asset , diff , diff_eur))
+        
+        # Get USD price for better tracking
+        try:
+            eth_price_usd = self.get_price(exchange, 'ETH', 'USDT', mode='average')
+            diff_usd = diff * eth_price_usd if eth_price_usd else 0
+        except:
+            diff_usd = 0
+        
+        # Track profits
+        self.trades_executed += 1
+        if diff > 0:
+            self.successful_trades += 1
+            self.total_profit_eth += diff
+            self.total_profit_usd += diff_usd
+        
+        success = diff > 0
+        self.log("Arbitrage {:5} on binance, diff: {:8.6f}ETH (${:.2f} USD). Total profit: {:8.6f}ETH (${:.2f} USD) | Success rate: {:.1f}%".format(
+            asset, diff, diff_usd, self.total_profit_eth, self.total_profit_usd, 
+            (self.successful_trades / self.trades_executed * 100) if self.trades_executed > 0 else 0
+        ))
+        self.save_profit_tracking()
+        
+        # Send Telegram notification
+        if self.telegram:
+            self.telegram.notify_trade_executed('Binance', asset, diff, diff_usd, success)
+    
+    # Load profit tracking from file
+    def load_profit_tracking(self):
+        try:
+            import json
+            import os
+            if os.path.exists('profit_tracking.json'):
+                with open('profit_tracking.json', 'r') as f:
+                    data = json.load(f)
+                    self.total_profit_eth = data.get('total_profit_eth', 0.0)
+                    self.total_profit_usd = data.get('total_profit_usd', 0.0)
+                    self.trades_executed = data.get('trades_executed', 0)
+                    self.successful_trades = data.get('successful_trades', 0)
+        except Exception as e:
+            self.log("Error loading profit tracking: {}".format(str(e)))
+    
+    # Save profit tracking to file
+    def save_profit_tracking(self):
+        try:
+            import json
+            data = {
+                'total_profit_eth': self.total_profit_eth,
+                'total_profit_usd': self.total_profit_usd,
+                'trades_executed': self.trades_executed,
+                'successful_trades': self.successful_trades,
+                'last_updated': datetime.now().isoformat()
+            }
+            with open('profit_tracking.json', 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            self.log("Error saving profit tracking: {}".format(str(e)))
+    
+    # Get profit statistics
+    def get_profit_stats(self):
+        success_rate = (self.successful_trades / self.trades_executed * 100) if self.trades_executed > 0 else 0
+        return {
+            'total_profit_eth': self.total_profit_eth,
+            'total_profit_usd': self.total_profit_usd,
+            'trades_executed': self.trades_executed,
+            'successful_trades': self.successful_trades,
+            'success_rate': success_rate
+        }
