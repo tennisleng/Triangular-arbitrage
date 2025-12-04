@@ -1,0 +1,66 @@
+{
+  "results": {
+    "cross_exchange": {
+      "strategy": "Cross-Exchange Arbitrage",
+      "years": 10,
+      "total_trades": 42,
+      "wins": 7,
+      "win_rate_pct": 16.666666666666664,
+      "total_pnl_usd": 3.909440855413944,
+      "avg_trade_usd": 0.09308192512890343,
+      "sharpe_ratio": 0,
+      "max_drawdown_usd": 0.0,
+      "annualized_return_pct": 0.007818881710827888,
+      "profitable": true
+    },
+    "triangular": {
+      "strategy": "Triangular Arbitrage",
+      "years": 10,
+      "total_trades": 53,
+      "wins": 11,
+      "win_rate_pct": 20.754716981132077,
+      "total_pnl_usd": 2.0898480042568277,
+      "avg_trade_usd": 0.039431094419940145,
+      "annualized_return_pct": 0.0069661600141894256,
+      "profitable": true
+    },
+    "funding_rate": {
+      "strategy": "Funding Rate Arbitrage",
+      "years": 10,
+      "collections": 5419,
+      "total_pnl_usd": 17269.380898619496,
+      "sharpe_ratio": 58.07252009230304,
+      "annualized_return_pct": 17.269380898619495,
+      "profitable": true
+    },
+    "grid_trading": {
+      "strategy": "Grid Trading",
+      "years": 10,
+      "total_trades": 34141,
+      "total_pnl_usd": 6484.910488118017,
+      "avg_trade_usd": 0.18994494854040647,
+      "final_inventory_usd": 4400,
+      "profitable": true
+    },
+    "market_making": {
+      "strategy": "Market Making",
+      "years": 10,
+      "total_trades": 8571,
+      "total_pnl_usd": 581.0187880663381,
+      "adverse_selection_loss_usd": 40.90121193366198,
+      "final_inventory_usd": -100,
+      "profitable": true
+    },
+    "futures_basis": {
+      "strategy": "Futures Basis Trade",
+      "years": 10,
+      "total_trades": 120,
+      "total_pnl_usd": 4903.058959301929,
+      "sharpe_ratio": 6.296445800045437,
+      "annualized_return_pct": 4.903058959301928,
+      "profitable": true
+    }
+  },
+  "total_pnl": 29244.368422965454,
+  "all_positive_ev": true
+}

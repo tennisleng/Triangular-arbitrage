@@ -71,3 +71,60 @@ EXCHANGE_SETTINGS = {
         'max_leverage': 10  # Up to 10x leverage
     }
 }
+
+# Paper trading mode (set to False for live trading)
+PAPER_TRADING = True
+
+# Multi-strategy settings
+ENABLE_FUTURES_ARBITRAGE = False  # Requires futures API access
+ENABLE_DEX_ARBITRAGE = False      # Requires Web3 wallet
+
+# Grid trading settings
+GRID_TRADING = {
+    'default_num_grids': 10,
+    'min_grid_spacing': 0.005,  # 0.5% minimum spacing
+    'max_grid_spacing': 0.05,   # 5% maximum spacing
+    'default_amount_per_grid': 0.01  # Amount per grid level
+}
+
+# Market making settings
+MARKET_MAKING = {
+    'min_spread': 0.002,        # 0.2% minimum spread
+    'max_spread': 0.02,         # 2% maximum spread
+    'quote_refresh_interval': 5, # Seconds between quote updates
+    'max_inventory_skew': 0.5   # Maximum inventory imbalance
+}
+
+# Futures-Spot arbitrage settings
+FUTURES_SPOT = {
+    'min_basis_percentage': 0.5,   # Minimum basis to trade
+    'max_leverage': 3,             # Maximum leverage for futures
+    'position_ttl_hours': 168      # Max time to hold position (7 days)
+}
+
+# Funding rate arbitrage settings
+FUNDING_RATE = {
+    'min_funding_rate': 0.01,      # 0.01% per period minimum
+    'collection_interval': 8,       # Hours between funding
+    'max_position_size_usd': 10000  # Max position value
+}
+
+# DEX/CEX arbitrage settings
+DEX_CEX = {
+    'min_profit_percentage': 0.5,
+    'gas_buffer_percentage': 50,    # Extra gas buffer
+    'max_slippage': 0.02           # 2% max slippage on DEX
+}
+
+# Order execution settings
+ORDER_EXECUTION = {
+    'default_strategy': 'market',   # market, twap, vwap, iceberg, smart
+    'twap_duration_seconds': 60,
+    'twap_num_slices': 10,
+    'vwap_duration_hours': 4,
+    'iceberg_visible_percentage': 0.1
+}
+
+# Web3 settings (for DEX arbitrage)
+WEB3_RPC_URL = ''  # Set your RPC URL (e.g., Alchemy, Infura)
+WEB3_PRIVATE_KEY = ''  # WARNING: Keep secure, never commit to git
