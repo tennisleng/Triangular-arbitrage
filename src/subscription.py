@@ -112,3 +112,38 @@ class SubscriptionManager:
             settings.PREMIUM_FEATURES_ENABLED = True
         else:
             settings.PREMIUM_FEATURES_ENABLED = False
+    
+    def get_days_remaining(self):
+        """Get number of days remaining on subscription"""
+        if not self.license_data['expires_at']:
+            return None
+        try:
+            expires = datetime.fromisoformat(self.license_data['expires_at'])
+            remaining = (expires - datetime.now()).days
+            return max(0, remaining)
+        except:
+            return None
+    
+    def upgrade_tier(self, new_tier: str, days: int = 30):
+        """Upgrade to a new tier"""
+        valid_tiers = ['free', 'basic', 'premium', 'enterprise']
+        if new_tier not in valid_tiers:
+            return False
+        
+        current_tier_idx = valid_tiers.index(self.license_data['tier'])
+        new_tier_idx = valid_tiers.index(new_tier)
+        
+        if new_tier_idx <= current_tier_idx:
+            return False  # Can only upgrade, not downgrade
+        
+        return self.activate_license(f'upgrade-{new_tier}', new_tier, days)
+    
+    def get_subscription_details(self):
+        """Get detailed subscription information"""
+        return {
+            'tier': self.get_tier(),
+            'features': self.license_data['features'],
+            'expires_at': self.license_data['expires_at'],
+            'is_valid': self.is_valid(),
+            'days_remaining': self.get_days_remaining()
+        }
