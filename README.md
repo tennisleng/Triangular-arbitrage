@@ -1,100 +1,71 @@
 # Triangular Arbitrage Bot
 
-A multi-threaded trading bot that exploits price inefficiencies across ETH/BTC/ALT pairs on Binance.
+Automated crypto trading bot that finds and exploits price gaps across ETH/BTC/ALT pairs on Binance.
 
----
+## What it does
 
-### The concept
+- Scans every ALT token on Binance for triangular arbitrage opportunities in real time
+- Checks both forward (ETH → ALT → BTC → ETH) and backward (ETH → BTC → ALT → ETH) paths simultaneously
+- Uses actual order book depth, not ticker prices, to calculate real execution cost
+- Executes trades automatically when expected profit exceeds the threshold
+- Runs 8 parallel threads for maximum scanning speed
 
-When the price of a token is slightly different depending on which pair you trade through, there's a small window to profit. This bot catches those windows.
+## Why it works
 
-The bot checks both directions — forward (ETH → ALT → BTC → ETH) and backward (ETH → BTC → ALT → ETH) — in parallel across every available ALT pair, checks the actual order book depth (not just ticker price), and only executes when the math works out after fees and slippage.
+- Limit orders at 0.05% maker fee instead of 0.1% taker — cuts trading cost in half
+- Detects BNB balance and applies the 25% Binance fee discount automatically
+- Estimates slippage from order book depth before committing to any trade
+- Scales position size based on opportunity quality — bigger edge gets more capital
+- Filters out opportunities that look good on paper but would lose money in execution
 
----
+## Backtest Performance (10yr simulated)
 
-### What makes this different
+| Strategy | Total PnL | Trades | Profitable |
+|---|---|---|---|
+| Funding Rate Arb | $17,269 | 5,419 | ✅ |
+| Grid Trading | $6,485 | 34,141 | ✅ |
+| Futures Basis | $4,903 | 120 | ✅ |
+| Market Making | $581 | 8,571 | ✅ |
+| Cross-Exchange | $3.91 | 42 | ✅ |
+| Triangular Arb | $2.09 | 53 | ✅ |
 
-**It's not a toy.** Most open-source arb bots use ticker prices and ignore execution costs — they look profitable on paper but lose money in practice. This one:
+**Combined PnL: $29,244 — all strategies positive EV.**
 
-- Reads order book depth before every trade to estimate real slippage
-- Uses limit orders (0.05% maker fee) instead of market orders (0.1% taker fee)
-- Auto-detects BNB balance for an additional 25% fee discount
-- Scales position size dynamically — bigger edge = more capital, small edge = conservative
-- Runs 8 parallel threads in aggressive mode for faster scanning
+## Configuration
 
----
-
-### Quickstart
-
-```bash
-pip install -r requirements.txt
-```
-
-Add your keys to `data/secrets.py`, then:
-
-```bash
-python ini.py              # start the bot
-python check_profit.py     # monitor profit (separate terminal)
-```
-
----
-
-### Config
-
-All in `data/settings.py`:
-
-| | Default | |
+| Setting | Default | Description |
 |---|---|---|
-| **Min profit threshold** | `$1.00` | Won't trade below this |
-| **Aggressive mode** | `On` | 20% lower threshold, 8 threads |
-| **Dynamic sizing** | `On` | 35-80% of balance per trade |
-| **Slippage optimization** | `On` | Order book depth analysis |
-| **Max position** | `50%` | Safety cap per trade |
+| Min profit threshold | $1.00 | Minimum expected profit to execute a trade |
+| Aggressive mode | On | Lowers detection threshold by 20%, uses 8 threads |
+| Dynamic position sizing | On | Allocates 35-80% of balance based on opportunity quality |
+| Slippage optimization | On | Analyzes order book depth before every trade |
+| Max position size | 50% | Hard cap on balance used per trade |
 
----
+## Setup
 
-### Project layout
+- Install dependencies with `pip install -r requirements.txt`
+- Add Binance API keys to `data/secrets.py`
+- Run `python ini.py` to start the bot
+- Run `python check_profit.py` in a separate terminal to monitor profit
+- Optional: add Telegram bot token and chat ID to `data/secrets.py` for push notifications
 
-```
-ini.py                       entry point — spawns threads, runs the loop
-src/
-  model.py                   core logic — pricing, execution, arbitrage math
-  strategies.py              alternative strategies (grid, funding rate, etc)
-  arbitrage_algorithms.py    detection algorithms
-  dashboard.py               live web dashboard (Flask + WebSocket)
-  ml_predictor.py            ML-based prediction (XGBoost / LightGBM / PyTorch)
-  order_executor.py          order management
-  exchange_manager.py        exchange connections
-  telegram_notifier.py       trade alerts via Telegram
-data/
-  settings.py                all tunable parameters
-  secrets.py                 API keys (not committed)
-  tokens.py                  token list to scan
-```
+## Features
 
----
+- **Live dashboard** — Flask + WebSocket UI on port 5001 with profit charts and trade history
+- **Telegram alerts** — real-time notifications for every opportunity and trade
+- **REST API** — stats, trade history, and subscription management on port 5000
+- **ML prediction** — opportunity scoring with XGBoost, LightGBM, and PyTorch models
+- **Profit tracking** — persistent tracking across restarts, saved to `profit_tracking.json`
 
-### Backtest results (10yr simulated)
+## Tech
 
-| Strategy | PnL | Trades |
-|---|---|---|
-| Funding Rate Arb | **$17,269** | 5,419 collections |
-| Grid Trading | **$6,485** | 34,141 |
-| Futures Basis | **$4,903** | 120 |
-| Market Making | **$581** | 8,571 |
-| Cross-Exchange | **$3.91** | 42 |
-| Triangular Arb | **$2.09** | 53 |
+- Python
+- ccxt (exchange API)
+- Flask + Socket.IO (dashboard)
+- Plotly (charting)
+- scikit-learn, XGBoost, LightGBM, PyTorch (ML)
+- Binance API
 
-All strategies positive EV. Full data in `backtest_results.json`, run your own with `python run_backtest.py`.
+## License
 
----
-
-### Extras
-
-- **Dashboard** — real-time web UI on port 5001 showing opportunities, profit charts, trade history
-- **Telegram alerts** — set up via [@BotFather](https://t.me/BotFather), drop creds in `data/secrets.py`
-- **REST API** — stats, trade history, subscription management on port 5000
-
----
-
-*Built with Python, ccxt, and a lot of staring at order books.*
+GPL-3.0
