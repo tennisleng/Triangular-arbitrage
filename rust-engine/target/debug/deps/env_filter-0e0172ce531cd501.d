@@ -1,0 +1,10 @@
+/Users/andrew/.gemini/antigravity/scratch/Triangular-arbitrage/rust-engine/target/debug/deps/env_filter-0e0172ce531cd501.d: /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/lib.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/directive.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/filter.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/filtered_log.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/op.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/parser.rs
+
+/Users/andrew/.gemini/antigravity/scratch/Triangular-arbitrage/rust-engine/target/debug/deps/libenv_filter-0e0172ce531cd501.rmeta: /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/lib.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/directive.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/filter.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/filtered_log.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/op.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/parser.rs
+
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/lib.rs:
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/directive.rs:
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/filter.rs:
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/filtered_log.rs:
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/op.rs:
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_filter-1.0.1/src/parser.rs:

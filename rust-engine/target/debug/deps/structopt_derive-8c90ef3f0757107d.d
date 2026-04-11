@@ -1,0 +1,10 @@
+/Users/andrew/.gemini/antigravity/scratch/Triangular-arbitrage/rust-engine/target/debug/deps/structopt_derive-8c90ef3f0757107d.d: /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/lib.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/attrs.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/doc_comments.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/parse.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/spanned.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/ty.rs
+
+/Users/andrew/.gemini/antigravity/scratch/Triangular-arbitrage/rust-engine/target/debug/deps/libstructopt_derive-8c90ef3f0757107d.dylib: /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/lib.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/attrs.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/doc_comments.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/parse.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/spanned.rs /Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/ty.rs
+
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/lib.rs:
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/attrs.rs:
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/doc_comments.rs:
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/parse.rs:
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/spanned.rs:
+/Users/andrew/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/structopt-derive-0.4.18/src/ty.rs:
