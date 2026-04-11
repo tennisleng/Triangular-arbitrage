@@ -149,10 +149,14 @@ class TestEvaluator:
         )
 
         result_low_fee = evaluate_triangle(
-            triangle=triangle, books=books, fee_rate=Decimal("0.001"),
+            triangle=triangle,
+            books=books,
+            fee_rate=Decimal("0.001"),
         )
         result_high_fee = evaluate_triangle(
-            triangle=triangle, books=books, fee_rate=Decimal("0.005"),
+            triangle=triangle,
+            books=books,
+            fee_rate=Decimal("0.005"),
         )
 
         assert result_low_fee is not None
@@ -169,7 +173,9 @@ class TestEvaluator:
         )
 
         result = evaluate_triangle(
-            triangle=triangle, books=books, fee_rate=Decimal("0.001"),
+            triangle=triangle,
+            books=books,
+            fee_rate=Decimal("0.001"),
         )
 
         if result is not None:

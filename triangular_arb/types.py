@@ -14,8 +14,8 @@ from decimal import Decimal
 from typing import NewType, Optional, Tuple
 
 # ─── Branded newtypes prevent passing a bid where an ask is expected ──────────
-Symbol = NewType("Symbol", str)       # e.g. "ETH"
-Pair = NewType("Pair", str)           # e.g. "ETH/BTC"
+Symbol = NewType("Symbol", str)  # e.g. "ETH"
+Pair = NewType("Pair", str)  # e.g. "ETH/BTC"
 ExchangeId = NewType("ExchangeId", str)
 
 
@@ -34,13 +34,15 @@ class OrderStatus(enum.Enum):
 
 class Direction(enum.Enum):
     """Which way around the triangle we're going."""
-    FORWARD = "forward"    # A → B → C → A
+
+    FORWARD = "forward"  # A → B → C → A
     BACKWARD = "backward"  # A → C → B → A
 
 
 @dataclass(frozen=True)
 class PriceLevel:
     """Single level in an order book."""
+
     price: Decimal
     quantity: Decimal
 
@@ -48,6 +50,7 @@ class PriceLevel:
 @dataclass(frozen=True)
 class OrderBook:
     """Snapshot of an order book at a point in time."""
+
     pair: Pair
     bids: Tuple[PriceLevel, ...]  # Best bid first (descending price)
     asks: Tuple[PriceLevel, ...]  # Best ask first (ascending price)
@@ -72,12 +75,13 @@ class Triangle:
     Example: ETH → LTC/ETH → LTC/BTC → ETH/BTC
     The legs define which pairs to trade and in what order.
     """
-    base: Symbol            # The currency we start and end with (e.g., ETH)
-    leg1_pair: Pair         # e.g. LTC/ETH
-    leg1_side: Side         # BUY or SELL
-    leg2_pair: Pair         # e.g. LTC/BTC
+
+    base: Symbol  # The currency we start and end with (e.g., ETH)
+    leg1_pair: Pair  # e.g. LTC/ETH
+    leg1_side: Side  # BUY or SELL
+    leg2_pair: Pair  # e.g. LTC/BTC
     leg2_side: Side
-    leg3_pair: Pair         # e.g. ETH/BTC
+    leg3_pair: Pair  # e.g. ETH/BTC
     leg3_side: Side
     intermediate_a: Symbol  # e.g. LTC
     intermediate_b: Symbol  # e.g. BTC
@@ -93,11 +97,12 @@ class Triangle:
 @dataclass(frozen=True)
 class Opportunity:
     """A detected arbitrage opportunity with estimated profit."""
+
     triangle: Triangle
     direction: Direction
-    gross_profit_bps: Decimal   # Before fees/slippage
-    net_profit_bps: Decimal     # After fees/slippage
-    estimated_size: Decimal     # Max executable size (bottleneck liquidity)
+    gross_profit_bps: Decimal  # Before fees/slippage
+    net_profit_bps: Decimal  # After fees/slippage
+    estimated_size: Decimal  # Max executable size (bottleneck liquidity)
     books: Tuple[OrderBook, OrderBook, OrderBook]
     detected_at_ns: int = field(default_factory=time.time_ns)
 
@@ -113,6 +118,7 @@ class Opportunity:
 @dataclass(frozen=True)
 class Fill:
     """Result of a single leg execution."""
+
     pair: Pair
     side: Side
     price: Decimal
@@ -132,6 +138,7 @@ class ArbitrageResult:
     Immutable record for audit trail. Every trade ever executed
     can be reconstructed from a sequence of these.
     """
+
     opportunity: Opportunity
     fills: Tuple[Fill, ...]
     net_profit: Decimal

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 class ExchangeConfig(BaseModel):
     """Connection settings for a single exchange."""
+
     exchange_id: str
     api_key: str = ""
     api_secret: str = ""
@@ -27,6 +28,7 @@ class ExchangeConfig(BaseModel):
 
 class RiskConfig(BaseModel):
     """Risk management parameters."""
+
     max_position_pct: Decimal = Field(
         default=Decimal("0.5"),
         description="Max fraction of balance to use per trade",
@@ -46,6 +48,7 @@ class RiskConfig(BaseModel):
 
 class ExecutionConfig(BaseModel):
     """Order execution parameters."""
+
     use_limit_orders: bool = True
     limit_order_timeout_s: float = 2.0
     max_retries: int = 3
@@ -58,6 +61,7 @@ class ExecutionConfig(BaseModel):
 
 class ScannerConfig(BaseModel):
     """Triangle discovery and scanning parameters."""
+
     base_currencies: list[str] = Field(default_factory=lambda: ["ETH", "BTC", "USDT"])
     scan_interval_ms: int = 500
     min_book_levels: int = 3
@@ -68,6 +72,7 @@ class ScannerConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     """Structured logging config."""
+
     level: str = "INFO"
     json_output: bool = True
     log_dir: str = "logs"
@@ -78,6 +83,7 @@ class Config(BaseModel):
     Top-level configuration. Validated at startup — if the config is invalid,
     the process refuses to start rather than silently misbehaving.
     """
+
     exchange: ExchangeConfig
     risk: RiskConfig = Field(default_factory=RiskConfig)
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)

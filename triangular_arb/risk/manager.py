@@ -33,6 +33,7 @@ class RejectionReason(Enum):
 @dataclass
 class RiskState:
     """Mutable risk state that tracks session statistics."""
+
     daily_pnl: Decimal = Decimal("0")
     starting_balance: Decimal = Decimal("0")
     consecutive_losses: int = 0

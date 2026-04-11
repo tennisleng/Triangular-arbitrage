@@ -91,7 +91,10 @@ class Executor:
         if fill1.status != OrderStatus.FILLED:
             log.warning("leg1_failed", fill=fill1)
             return self._build_result(
-                opportunity, tuple(fills), total_latency, error="Leg 1 failed",
+                opportunity,
+                tuple(fills),
+                total_latency,
+                error="Leg 1 failed",
             )
 
         # ── Leg 2 ────────────────────────────────────────────────────────
@@ -114,7 +117,10 @@ class Executor:
             if rollback:
                 fills.append(rollback)
             return self._build_result(
-                opportunity, tuple(fills), total_latency, error="Leg 2 failed",
+                opportunity,
+                tuple(fills),
+                total_latency,
+                error="Leg 2 failed",
             )
 
         # ── Leg 3 ────────────────────────────────────────────────────────
@@ -134,7 +140,10 @@ class Executor:
         if fill3.status != OrderStatus.FILLED:
             log.warning("leg3_failed_attempting_rollback", fill=fill3)
             return self._build_result(
-                opportunity, tuple(fills), total_latency, error="Leg 3 failed",
+                opportunity,
+                tuple(fills),
+                total_latency,
+                error="Leg 3 failed",
             )
 
         return self._build_result(opportunity, tuple(fills), total_latency)
@@ -201,17 +210,19 @@ class Executor:
             price = levels[0].price if levels else Decimal("0")
             fee = qty * Decimal("0.001")
 
-            fills.append(Fill(
-                pair=book.pair,
-                side=side,
-                price=price,
-                quantity=qty,
-                fee=fee,
-                fee_currency=Symbol(""),
-                status=OrderStatus.FILLED,
-                exchange_order_id=f"sim-{i}",
-                latency_ms=0.5,
-            ))
+            fills.append(
+                Fill(
+                    pair=book.pair,
+                    side=side,
+                    price=price,
+                    quantity=qty,
+                    fee=fee,
+                    fee_currency=Symbol(""),
+                    status=OrderStatus.FILLED,
+                    exchange_order_id=f"sim-{i}",
+                    latency_ms=0.5,
+                )
+            )
 
             # Simulate conversion
             if side == Side.BUY:

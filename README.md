@@ -1,15 +1,48 @@
 # Triangular Arbitrage Engine
 
-A high-frequency triangular arbitrage engine for cryptocurrency exchanges, built with institutional-grade engineering practices.
+High-frequency triangular arbitrage for crypto exchanges. Detects and executes three-leg arbitrage cycles (e.g., ETH → LTC → BTC → ETH) when price inefficiencies create risk-free profit opportunities.
+
+Built with the same engineering rigor you'd find at a quantitative trading firm: Decimal arithmetic for financial math, immutable domain types, circuit breakers, and a fully async execution pipeline.
+
+[![CI](https://github.com/tennisleng/Triangular-arbitrage/actions/workflows/ci.yml/badge.svg)](https://github.com/tennisleng/Triangular-arbitrage/actions/workflows/ci.yml)
+
+---
+
+## What It Does
+
+Triangular arbitrage exploits pricing inconsistencies between three trading pairs on the same exchange. When the cross-rates between three currencies don't perfectly align, a cycle trade can extract the difference as profit.
+
+```
+ETH ──buy LTC/ETH──▶ LTC ──sell LTC/BTC──▶ BTC ──buy ETH/BTC──▶ ETH
+ 1.000                                                           1.003
+                                                                  ↑
+                                                          0.3% profit
+```
+
+This engine automates the entire pipeline: discovering valid triangles, monitoring order books for opportunities, evaluating profitability after fees and slippage, and executing all three legs atomically.
+
+## Quick Start
+
+```bash
+git clone https://github.com/tennisleng/Triangular-arbitrage.git
+cd Triangular-arbitrage
+pip install -e ".[dev]"
+
+cp config.example.yaml config.yaml
+# Add your exchange API keys to config.yaml
+
+triangular-arb              # Runs in paper trading mode by default
+triangular-arb --dry-run    # Explicitly force paper trading
+```
 
 ## Architecture
 
 ```
 triangular_arb/
-├── types.py              # Immutable domain types (Decimal arithmetic, no floats)
+├── types.py              # Immutable domain types (Decimal, frozen dataclasses)
 ├── config.py             # Pydantic-validated YAML configuration
-├── engine.py             # Main async event loop orchestrator
-├── cli.py                # CLI with signal handling
+├── engine.py             # Async event loop orchestrator
+├── cli.py                # CLI entry point with signal handling
 ├── exchange/
 │   ├── adapter.py        # Abstract exchange interface (ABC)
 │   └── binance.py        # Binance implementation via ccxt async
@@ -19,119 +52,101 @@ triangular_arb/
 ├── execution/
 │   └── executor.py       # Atomic tri-leg execution with rollback
 ├── risk/
-│   └── manager.py        # Circuit breakers, drawdown guards, position limits
+│   └── manager.py        # Circuit breakers, drawdown guards
 └── utils/
-    └── logging.py        # Structured JSON logging via structlog
+    └── logging.py        # Structured JSON logging (structlog)
 ```
 
-## Design Decisions
+The system is composed of five independent layers, each with a single responsibility:
 
-**Decimal arithmetic everywhere.** Financial calculations use `decimal.Decimal`, never `float`. A 64-bit float has ~15 significant digits — enough to silently round away the 1-5 basis point margins this system operates on. Decimal conversion happens at the exchange adapter boundary; internal code never sees floats.
+**Discovery** — Builds a graph of all trading pairs and enumerates every valid 3-cycle. No hardcoded token lists; automatically adapts when exchanges add or remove pairs.
 
-**Immutable domain types.** All core types (`OrderBook`, `Triangle`, `Opportunity`, `Fill`, `ArbitrageResult`) are frozen dataclasses. This prevents accidental mutation across async tasks and makes the audit trail trivially reproducible.
+**Evaluation** — For each triangle, concurrently fetches all three order books and computes the effective round-trip rate using actual book prices (not just top-of-book). Accounts for three legs of fees, bid-ask spread, and available liquidity.
 
-**Exchange adapter pattern.** The `ExchangeAdapter` ABC decouples strategy logic from exchange specifics. Swap in a mock adapter and every strategy test runs without network calls. Adding a new exchange means implementing one interface, not modifying strategy code.
+**Risk** — A pre-execution gate that can only reject, never modify. Checks minimum profit threshold, order book freshness (rejects stale data), daily drawdown limits, and consecutive loss circuit breakers.
 
-**Graph-based triangle discovery.** Instead of hardcoding token lists, we build an adjacency graph from all trading pairs and enumerate valid 3-cycles. This automatically adapts to new listings and delistings without config changes.
+**Execution** — Runs the three legs sequentially since each leg's output determines the next leg's input. On any leg failure, attempts best-effort rollback by reversing completed trades.
 
-**Risk manager as a gate, not a modifier.** The risk manager can only reject opportunities — it never modifies them. This makes risk decisions auditable and prevents subtle bugs where risk adjustments interact with execution logic.
-
-**Structured logging.** Every log entry is a JSON object with `timestamp`, `level`, and `event` fields. No more parsing text files with regex. Pipe to any log aggregation system.
-
-## Quick Start
-
-```bash
-# Clone and install
-git clone https://github.com/tennisleng/Triangular-arbitrage.git
-cd Triangular-arbitrage
-pip install -e ".[dev]"
-
-# Configure
-cp config.example.yaml config.yaml
-# Edit config.yaml with your API keys
-
-# Run (paper trading by default)
-triangular-arb --config config.yaml
-
-# Run with explicit dry-run
-triangular-arb --dry-run
-```
+**Exchange Adapter** — Abstract interface (ABC) that decouples all strategy logic from exchange specifics. The Binance implementation handles ccxt async calls, automatic retries with exponential backoff, and Decimal conversion at the boundary.
 
 ## Configuration
 
-Configuration is validated at startup via Pydantic. If the config is invalid, the process refuses to start rather than discovering misconfiguration mid-trade.
+All configuration lives in a single YAML file validated by Pydantic at startup. If the config is invalid, the process fails immediately with a clear error instead of silently misbehaving mid-trade.
 
-See [`config.example.yaml`](config.example.yaml) for all available options with documentation.
+```yaml
+exchange:
+  exchange_id: binance
+  api_key: ""
+  api_secret: ""
 
-Key parameters:
+risk:
+  min_profit_bps: "5"        # Need at least 5 basis points net profit
+  max_daily_loss_pct: "5"    # Circuit breaker at 5% daily drawdown
+  max_consecutive_losses: 5  # Pause after 5 losses in a row
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `risk.min_profit_bps` | `5` | Minimum net profit (basis points) to execute |
-| `risk.max_daily_loss_pct` | `5` | Circuit breaker threshold (% of starting balance) |
-| `risk.max_consecutive_losses` | `5` | Consecutive losses before cooldown |
-| `execution.max_slippage_bps` | `10` | Max acceptable slippage per leg |
-| `scanner.scan_interval_ms` | `500` | Time between full triangle scans |
-| `dry_run` | `true` | Paper trading mode |
+execution:
+  use_limit_orders: true
+  max_slippage_bps: "10"
 
-## How It Works
+scanner:
+  base_currencies: ["ETH", "BTC", "USDT"]
+  scan_interval_ms: 500
 
-### 1. Triangle Discovery
-On startup, the engine fetches all active trading pairs and builds an adjacency graph. It enumerates all valid 3-node cycles starting from configured base currencies (default: ETH, BTC, USDT). This typically finds 100-500+ triangles depending on the exchange.
-
-### 2. Continuous Scanning
-The async event loop scans each triangle by concurrently fetching all three order books (`asyncio.gather`). For each set of books, the evaluator computes the effective exchange rate around the triangle using actual order book prices (not just top-of-book).
-
-### 3. Profit Evaluation
-Profit is calculated as:
+dry_run: true  # Paper trading (no real orders placed)
 ```
-net_rate = (rate_leg1 × rate_leg2 × rate_leg3) × (1 - fee)³
-net_profit_bps = (net_rate - 1) × 10000
+
+See [`config.example.yaml`](config.example.yaml) for the full reference with all available options.
+
+## How Profit Is Calculated
+
+The evaluator computes the net exchange rate around the triangle:
+
 ```
-The evaluator uses Decimal arithmetic and accounts for:
-- Three legs of trading fees (compounded)
-- Bid-ask spread on each leg
-- Available liquidity (bottleneck sizing)
+gross_rate = rate_leg1 × rate_leg2 × rate_leg3
+net_rate   = gross_rate × (1 - fee)³
+profit_bps = (net_rate - 1) × 10000
+```
 
-### 4. Risk Gating
-Every opportunity passes through the risk manager, which checks:
-- Net profit exceeds minimum threshold
-- Order books are fresh (not stale)
-- Daily drawdown is within limits
-- No consecutive loss streak
-- Circuit breaker is not tripped
+All arithmetic uses `decimal.Decimal`. A 64-bit float has ~15 significant digits — enough to silently round away the 1–5 basis point margins this system operates on. Every financial value enters the system as a string and is converted to Decimal exactly once, at the exchange adapter boundary.
 
-### 5. Execution
-The executor handles tri-leg execution sequentially (output of leg N is input to leg N+1). On any leg failure, it attempts best-effort rollback by reversing completed legs. All fills are recorded for audit trail regardless of outcome.
+## Risk Management
+
+The risk manager enforces five checks before any trade is executed:
+
+| Check | What It Does |
+|-------|-------------|
+| **Min profit threshold** | Rejects opportunities below the configured basis point minimum |
+| **Stale book detection** | Rejects order books older than the staleness threshold (default: 2s) |
+| **Daily drawdown limit** | Halts trading if cumulative daily losses exceed the configured % of starting balance |
+| **Consecutive loss breaker** | Triggers a 5-minute cooldown after N consecutive losing trades |
+| **Position limit** | Caps the number of concurrent open triangle positions |
+
+The risk manager is designed as a pure gate: it can reject an opportunity, but it can never modify one. This makes every risk decision auditable — you can always answer "why was this trade rejected?" by checking the rejection reason enum.
 
 ## Testing
 
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run with coverage
-pytest tests/ --cov=triangular_arb --cov-report=term-missing
-
-# Lint
-ruff check triangular_arb/ tests/
-
-# Type check
-mypy triangular_arb/
+pytest tests/ -v                                                # Run all tests
+pytest tests/ --cov=triangular_arb --cov-report=term-missing    # With coverage
+ruff check triangular_arb/ tests/                               # Lint
+ruff format --check triangular_arb/ tests/                      # Format check
+mypy triangular_arb/                                            # Type check
 ```
 
-## Project Lineage
+24 tests covering triangle discovery, profit evaluation, risk gating, and domain type invariants.
 
-Originally forked from [Cherecho/Triangular-arbitrage](https://github.com/Cherecho/Triangular-arbitrage). Completely rewritten with:
-- Async architecture (was: blocking threads)
-- Decimal financial math (was: floating point)
-- Typed domain model (was: raw dicts)
-- Exchange adapter pattern (was: hardcoded Binance calls)
-- Graph-based discovery (was: hardcoded token list)
-- Risk management with circuit breakers (was: none)
-- Structured JSON logging (was: text file append)
-- Pydantic config validation (was: Python files as config)
-- Comprehensive test suite (was: zero tests)
+## Design Principles
+
+- **Decimal, not float** — Financial math uses `decimal.Decimal` everywhere
+- **Immutable types** — Frozen dataclasses prevent mutation across async boundaries
+- **Adapter pattern** — Exchange interface is abstract; swap in a mock for testing
+- **Fail fast** — Invalid config crashes at startup, not mid-trade
+- **Structured logging** — JSON log entries, not text files parsed with regex
+- **Single responsibility** — Each module does one thing; no God classes
+
+## Lineage
+
+Originally forked from [Cherecho/Triangular-arbitrage](https://github.com/Cherecho/Triangular-arbitrage). Completely rewritten — no original code remains.
 
 ## License
 

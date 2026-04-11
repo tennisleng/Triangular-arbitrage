@@ -53,13 +53,15 @@ class BinanceAdapter(ExchangeAdapter):
 
     def __init__(self, config: ExchangeConfig) -> None:
         self._config = config
-        self._client = ccxt_async.binance({
-            "apiKey": config.api_key,
-            "secret": config.api_secret,
-            "timeout": config.timeout_ms,
-            "enableRateLimit": config.rate_limit,
-            "options": {"defaultType": "spot"},
-        })
+        self._client = ccxt_async.binance(
+            {
+                "apiKey": config.api_key,
+                "secret": config.api_secret,
+                "timeout": config.timeout_ms,
+                "enableRateLimit": config.rate_limit,
+                "options": {"defaultType": "spot"},
+            }
+        )
 
         if config.testnet:
             self._client.set_sandbox_mode(True)

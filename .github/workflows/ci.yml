@@ -7,11 +7,11 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-test:
+  test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.9", "3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -20,21 +20,22 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Lint with ruff
+      - name: Lint
         run: ruff check triangular_arb/ tests/
 
-      - name: Format check with ruff
+      - name: Format
         run: ruff format --check triangular_arb/ tests/
 
-      - name: Type check with mypy
+      - name: Type check
         run: mypy triangular_arb/
-        continue-on-error: true  # Strict mypy on first pass
+        continue-on-error: true
 
-      - name: Test with pytest
+      - name: Tests
         run: pytest tests/ -v --tb=short --cov=triangular_arb --cov-report=term-missing

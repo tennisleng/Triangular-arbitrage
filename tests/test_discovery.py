@@ -6,7 +6,6 @@ identifies triangular paths and assigns the right sides (BUY/SELL)
 for each leg.
 """
 
-
 from triangular_arb.strategy.discovery import discover_triangles
 from triangular_arb.types import Pair, Side
 
