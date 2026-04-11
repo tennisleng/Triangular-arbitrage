@@ -36,3 +36,12 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Node
+node_modules/
+dist/
+dashboard-web/dist/
+
+# Rust
+target/
+rust-engine/target/
