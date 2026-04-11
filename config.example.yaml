@@ -1,0 +1,40 @@
+# Example configuration for triangular-arb.
+# Copy to config.yaml and fill in your API keys.
+
+exchange:
+  exchange_id: binance
+  api_key: ""        # Your Binance API key
+  api_secret: ""     # Your Binance API secret
+  testnet: false
+  rate_limit: true
+  timeout_ms: 30000
+
+risk:
+  max_position_pct: "0.5"    # Max 50% of balance per trade
+  min_profit_bps: "5"        # Minimum 5 basis points net profit
+  max_daily_loss_pct: "5"    # Circuit breaker at 5% daily loss
+  max_consecutive_losses: 5
+  max_open_triangles: 3
+  stale_book_ms: 2000        # Reject books older than 2s
+
+execution:
+  use_limit_orders: true
+  limit_order_timeout_s: 2.0
+  max_retries: 3
+  max_slippage_bps: "10"     # Max 10bps slippage per leg
+  order_book_depth: 10
+
+scanner:
+  base_currencies: ["ETH", "BTC", "USDT"]
+  scan_interval_ms: 500
+  min_book_levels: 3
+  quote_currencies: ["ETH", "BTC", "USDT", "BNB"]
+
+logging:
+  level: INFO
+  json_output: true
+  log_dir: logs
+
+# IMPORTANT: Set to false only when you are ready for live trading.
+# In dry_run mode, all orders are simulated and no real trades are placed.
+dry_run: true

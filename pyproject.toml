@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "triangular-arb"
+version = "2.0.0"
+description = "High-frequency triangular arbitrage engine for cryptocurrency exchanges"
+readme = "README.md"
+license = {text = "GPL-3.0"}
+requires-python = ">=3.9"
+dependencies = [
+    "ccxt>=4.0.0",
+    "pydantic>=2.0.0",
+    "structlog>=23.0.0",
+    "tenacity>=8.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "mypy>=1.5",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+triangular-arb = "triangular_arb.cli:main"
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "RUF"]
+ignore = [
+    "UP006",   # Tuple -> tuple (3.9 compat)
+    "UP035",   # typing.Tuple deprecated (3.9 compat)
+    "UP045",   # Optional -> X | None (3.9 compat)
+    "SIM108",  # Prefer explicit if/else over ternary for complex logic
+    "SIM109",  # Prefer explicit comparisons for readability
+]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
