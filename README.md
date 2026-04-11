@@ -41,16 +41,18 @@ triangular-arb --dry-run    # Explicitly force paper trading
 triangular_arb/
 ├── types.py              # Immutable domain types (Decimal, frozen dataclasses)
 ├── config.py             # Pydantic-validated YAML configuration
-├── engine.py             # Async event loop orchestrator
+├── engine.py             # Async event loop orchestrator (7-stage pipeline)
 ├── cli.py                # CLI entry point with signal handling
 ├── exchange/
 │   ├── adapter.py        # Abstract exchange interface (ABC)
 │   └── binance.py        # Binance implementation via ccxt async
 ├── strategy/
 │   ├── discovery.py      # Graph-based triangle enumeration
-│   └── evaluator.py      # Order-book-aware profit calculation
+│   ├── evaluator.py      # Order-book-aware profit calculation
+│   └── toxicity.py       # Order book manipulation detection
 ├── execution/
-│   └── executor.py       # Atomic tri-leg execution with rollback
+│   ├── executor.py       # Atomic tri-leg execution with rollback
+│   └── stealth.py        # Anti-frontrunning countermeasures
 ├── risk/
 │   └── manager.py        # Circuit breakers, drawdown guards
 └── utils/
@@ -63,9 +65,11 @@ The system is composed of five independent layers, each with a single responsibi
 
 **Evaluation** — For each triangle, concurrently fetches all three order books and computes the effective round-trip rate using actual book prices (not just top-of-book). Accounts for three legs of fees, bid-ask spread, and available liquidity.
 
+**Toxicity Detection** — Scores each order book for manipulation signals before committing capital. Detects spoofing (identical-size layering), informed flow (lopsided volume), disappearing liquidity, and thin/wide markets. A toxic book means someone is trying to exploit us — we skip and move on.
+
 **Risk** — A pre-execution gate that can only reject, never modify. Checks minimum profit threshold, order book freshness (rejects stale data), daily drawdown limits, and consecutive loss circuit breakers.
 
-**Execution** — Runs the three legs sequentially since each leg's output determines the next leg's input. On any leg failure, attempts best-effort rollback by reversing completed trades.
+**Stealth Execution** — Anti-frontrunning countermeasures that make our order flow harder to detect and exploit. Randomized order sizes, timing jitter between legs, exponential opportunity decay, adaptive thresholds, and triangle rotation.
 
 **Exchange Adapter** — Abstract interface (ABC) that decouples all strategy logic from exchange specifics. The Binance implementation handles ccxt async calls, automatic retries with exponential backoff, and Decimal conversion at the boundary.
 
@@ -123,17 +127,43 @@ The risk manager enforces five checks before any trade is executed:
 
 The risk manager is designed as a pure gate: it can reject an opportunity, but it can never modify one. This makes every risk decision auditable — you can always answer "why was this trade rejected?" by checking the rejection reason enum.
 
+## Anti-Frontrunning & Competitive Defense
+
+In practice, triangular arbitrage is a Malthusian game. Opportunities are a finite resource consumed by the first firm to execute. This engine includes defenses against the specific ways competitors try to exploit algorithmic traders:
+
+### Order Book Toxicity Detection
+
+Before committing capital, every order book is scored for manipulation signals:
+
+| Signal | What It Detects |
+|--------|----------------|
+| **Thin book** | Insufficient depth to absorb our order without moving price |
+| **Wide spread** | Adverse selection risk — the market maker knows something |
+| **Imbalanced volume** | Informed flow on one side (someone has an information edge) |
+| **Layered orders** | Spoofing — identical-size levels creating fake depth |
+| **Disappearing liquidity** | One dominant level that will be pulled when we hit it |
+
+### Stealth Execution
+
+| Defense | How It Works |
+|---------|--------------|
+| **Size randomization** | ±5% noise on every order. Round-number orders are trivially identifiable on the tape. |
+| **Timing jitter** | Random delay between legs breaks the timing correlation that reveals multi-leg strategies |
+| **Opportunity decay** | Exponential decay model — a 10bps opportunity that's 500ms old is likely already taken |
+| **Adaptive thresholds** | When win rate drops (competitors are faster), we raise the bar and only take the safest trades |
+| **Triangle heat** | Rotating across triangles prevents competitors from learning our patterns |
+
+The key insight: when you can't outrun faster firms, you make yourself unpredictable. Randomized sizes, jittered timing, and rotating targets mean competitors can't build a reliable model of your behavior.
+
 ## Testing
 
 ```bash
-pytest tests/ -v                                                # Run all tests
+pytest tests/ -v                                                # 45 tests
 pytest tests/ --cov=triangular_arb --cov-report=term-missing    # With coverage
 ruff check triangular_arb/ tests/                               # Lint
 ruff format --check triangular_arb/ tests/                      # Format check
 mypy triangular_arb/                                            # Type check
 ```
-
-24 tests covering triangle discovery, profit evaluation, risk gating, and domain type invariants.
 
 ## Design Principles
 
@@ -143,6 +173,7 @@ mypy triangular_arb/                                            # Type check
 - **Fail fast** — Invalid config crashes at startup, not mid-trade
 - **Structured logging** — JSON log entries, not text files parsed with regex
 - **Single responsibility** — Each module does one thing; no God classes
+- **Unpredictability** — Randomized execution makes frontrunning expensive
 
 ## Lineage
 
